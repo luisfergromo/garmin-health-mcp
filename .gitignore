@@ -37,3 +37,5 @@ Thumbs.db
 
 # uv
 uv.lock
+downloaded-logs-*.csv
+new_log_errors.txt

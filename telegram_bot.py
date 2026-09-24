@@ -75,7 +75,7 @@ def start_health_server():
     logger.info(f"Healthcheck server listening on port {port}")
     server.serve_forever()
 
-threading.Thread(target=start_health_server, daemon=True).start()
+# The healthcheck server is started conditionally in main()
 
 # Initialize Garmin client
 garmin_client = _init_garmin_client()
@@ -693,8 +693,22 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
-    print("🤖 Telegram Bot is online and listening for messages.")
-    app.run_polling()
+    webhook_url = os.getenv("WEBHOOK_URL")
+    port = int(os.getenv("PORT", 8080))
+
+    if webhook_url:
+        print(f"🤖 Starting Telegram Bot in WEBHOOK mode on port {port}...")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            webhook_url=webhook_url.rstrip("/") + "/" + TELEGRAM_BOT_TOKEN,
+            url_path=TELEGRAM_BOT_TOKEN
+        )
+    else:
+        print("🤖 Starting Telegram Bot in POLLING mode...")
+        # Start healthcheck server so Cloud Run / Render TCP port checks pass during polling
+        threading.Thread(target=start_health_server, daemon=True).start()
+        app.run_polling()
 
 
 if __name__ == "__main__":

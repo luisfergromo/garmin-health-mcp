@@ -170,12 +170,13 @@ def _parse_transport_config() -> tuple[str, str, int]:
 
 def _init_garmin_client() -> _GarminProxy:
     """Initialize and authenticate the Garmin Connect client."""
-    garmin = Garmin(email=email, password=password, is_cn=is_cn, prompt_mfa=get_mfa)
-
+    
     # Try base64 token string from environment variable (Best for Render/Cloud)
     env_b64 = os.getenv("GARMIN_TOKENS_BASE64") or os.getenv("GARMINTOKENS_BASE64")
     if env_b64 and len(env_b64.strip()) > 50:
         try:
+            # Init without credentials to avoid fallback to login and 429 IP block
+            garmin = Garmin(email="", password="", is_cn=is_cn, prompt_mfa=get_mfa)
             token_json_str = base64.b64decode(env_b64.strip()).decode("utf-8")
             expanded_store = token_utils.resolve_token_path(tokenstore)
             os.makedirs(expanded_store, exist_ok=True)
@@ -191,12 +192,14 @@ def _init_garmin_client() -> _GarminProxy:
     # Try token-based auth from local disk
     if token_utils.token_exists(tokenstore):
         try:
+            # Init without credentials to avoid automatic fallback
+            garmin = Garmin(email="", password="", is_cn=is_cn, prompt_mfa=get_mfa)
             garmin.login(tokenstore)
             print("Authenticated via saved tokens.", file=sys.stderr)
             return _GarminProxy(garmin)
         except Exception as e:
             print(
-                f"Token auth failed ({e}), falling back to credentials...",
+                f"Token auth failed ({e}), falling back...",
                 file=sys.stderr,
             )
 
@@ -207,6 +210,8 @@ def _init_garmin_client() -> _GarminProxy:
             with open(expanded_b64, "r") as f:
                 token_b64 = f.read().strip()
             token_data = base64.b64decode(token_b64).decode()
+            # Init without credentials to avoid automatic fallback
+            garmin = Garmin(email="", password="", is_cn=is_cn, prompt_mfa=get_mfa)
             garmin.login(token_data)
             print("Authenticated via base64 tokens file.", file=sys.stderr)
             return _GarminProxy(garmin)
@@ -216,9 +221,10 @@ def _init_garmin_client() -> _GarminProxy:
                 file=sys.stderr,
             )
 
-    # Fall back to email/password login
+    # Fall back to email/password login only if tokens fail or are missing
     if email and password:
         try:
+            garmin = Garmin(email=email, password=password, is_cn=is_cn, prompt_mfa=get_mfa)
             garmin.login()
             # Save tokens for next time
             expanded_store = token_utils.resolve_token_path(tokenstore)
